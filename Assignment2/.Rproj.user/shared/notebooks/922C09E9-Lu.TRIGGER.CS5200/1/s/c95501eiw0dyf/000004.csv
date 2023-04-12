@@ -1,0 +1,9 @@
+"0","CREATE TRIGGER invalidEmail
+BEFORE INSERT ON Author
+BEGIN
+SELECT
+CASE
+WHEN NEW.email NOT LIKE '%_@_%._%' THEN
+RAISE(abort, 'Entered email is not valid!')
+END;
+END;"

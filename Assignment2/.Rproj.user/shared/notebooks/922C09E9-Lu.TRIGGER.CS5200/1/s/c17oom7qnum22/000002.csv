@@ -1,0 +1,3 @@
+"0","-- invalidEmail trigger test, we insert a valid email
+INSERT INTO Author VALUES
+(10005, ""Andy"", ""andy@uiuc.edu"", ""Contract"")"

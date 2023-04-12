@@ -1,0 +1,5 @@
+"0","CREATE TABLE Module (
+num TEXT PRIMARY KEY NOT NULL,
+title TEXT NOT NULL,
+lengthInMin NUMBER NOT NULL
+)"

@@ -1,0 +1,129 @@
+---
+title: "CS5200 Assignment7 Build Triggers"
+output: html_notebook
+author: Chenhao Lu, lu.chenh@northeastern.edu
+---
+
+```{r}
+library(RSQLite)
+
+fpath = "/Users/gary/Desktop/CS5200/Assignment/Assignment2/"
+dbfile = "assignment2.sqlite"
+
+# if database file already exists, we connect to it, otherwise we create
+# a new database file
+dbcon <- dbConnect(RSQLite::SQLite(), paste0(fpath,dbfile))
+```
+
+```{sql connection=dbcon}
+PRAGMA foreign_key = ON
+```
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Module
+```
+
+
+```{sql connection=dbcon}
+CREATE TABLE Module (
+num TEXT PRIMARY KEY NOT NULL,
+title TEXT NOT NULL,
+lengthInMin NUMBER NOT NULL
+)
+```
+
+```{sql connection=dbcon}
+CREATE TABLE IF NOT EXISTS Affiliation (
+aff TEXT NOT NULL PRIMARY KEY
+)
+```
+
+```{sql connection=dbcon}
+INSERT INTO Affiliation VALUES
+("PT"),
+("FT"),
+("Contract")
+```
+
+
+```{sql connection=dbcon}
+CREATE TABLE IF NOT EXISTS Author (
+aid NUMBER PRIMARY KEY NOT NULL,
+name TEXT NOT NULL,
+email TEXT NOT NULL,
+authorAffiliation TEXT NOT NULL,
+FOREIGN KEY (authorAffiliation) references Affiliation (aff)
+)
+```
+
+```{sql connection=dbcon}
+INSERT INTO Module(num, title, lengthInMin) VALUES
+("001", "Introduction", 30),
+("002", "Chapter 1", 50),
+("003", "Chapter 2", 45),
+("004", "Chapter 3", 45);
+```
+
+```{sql connection=dbcon}
+SELECT * FROM Module
+```
+
+```{sql connection=dbcon}
+INSERT INTO Author VALUES
+(10001, "Gary", "gary@neu.edu", "Contract"),
+(10002, "Lucy", "lucy@gt.edu", "FT"),
+(10003, "Jack", "jack@sd.edu", "PT"),
+(10004, "Peter", "peter@uiuc.edu", "Contract")
+```
+
+```{sql connection=dbcon}
+SELECT * FROM Author
+```
+
+## TRIGGER
+This invalidEmail tirgger is applied in the table Author and it will be fired when the insert email format is invalid. We create this trigger because when we insert data into the table, there could be many circustances dealing with invalid data. In the Author table, other columns is stricted by the INTEGER or CHARATER. But for email column, a CHARATER input doesn't mean that the input is valid. This trigger checks the format of input email and could save our time to clean the invalid data in next steps. However, there could be situation when we still need those invalid data instead of just aborting them. We can update our trigger in that case.
+```{sql connection=dbcon}
+CREATE TRIGGER invalidEmail
+BEFORE INSERT ON Author
+BEGIN
+SELECT
+CASE
+WHEN NEW.email NOT LIKE '%_@_%._%' THEN
+RAISE(abort, 'Entered email is not valid!')
+END;
+END;
+```
+
+```{sql testA, error = TRUE, connection=dbcon}
+-- invalidEmail trigger test, we insert a invalid email with no infomation before @
+INSERT INTO Author VALUES
+(10005, "Andy", "@uiuc.edu", "Contract")
+```
+
+```{sql testB, connection=dbcon,  error=TRUE}
+-- invalidEmail trigger test, we insert a invalid email
+INSERT INTO Author VALUES
+(10005, "Andy", "g@.edu", "Contract")
+```
+
+```{sql testC, connection=dbcon}
+-- invalidEmail trigger test, we insert a invalid email
+INSERT INTO Author VALUES
+(10005, "Andy", "andy@uiuc", "Contract")
+```
+
+```{sql testD, connection=dbcon}
+-- invalidEmail trigger test, we insert a valid email
+INSERT INTO Author VALUES
+(10005, "Andy", "andy@uiuc.edu", "Contract")
+```
+
+```{sql connection=dbcon}
+SELECT * FROM Author
+```
+
+```{r}
+dbDisconnect(dbcon)
+```
+
+

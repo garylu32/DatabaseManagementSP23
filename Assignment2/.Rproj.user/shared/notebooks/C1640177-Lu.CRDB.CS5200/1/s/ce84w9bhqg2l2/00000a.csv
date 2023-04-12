@@ -1,0 +1,3 @@
+"0","CREATE TABLE IF NOT EXISTS Affiliation (
+aff TEXT NOT NULL PRIMARY KEY
+)"

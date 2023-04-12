@@ -1,0 +1,83 @@
+---
+title: "CS5200 Assignment4 Implement a Relational Database"
+output: html_notebook
+---
+
+```{r}
+library(RSQLite)
+
+fpath = "/Users/gary/Desktop/CS5200/Assignment/Assignment2/"
+dbfile = "assignment2.sqlite"
+
+# if database file already exists, we connect to it, otherwise we create
+# a new database file
+dbcon <- dbConnect(RSQLite::SQLite(), paste0(fpath,dbfile))
+```
+
+```{sql connection=dbcon}
+PRAGMA foreign_key = ON
+```
+
+```{sql connection=dbcon}
+DROP TABLE IF EXISTS Module
+```
+
+
+```{sql connection=dbcon}
+CREATE TABLE Module (
+num TEXT PRIMARY KEY NOT NULL,
+title TEXT NOT NULL,
+lengthInMin NUMBER NOT NULL
+)
+```
+
+```{sql connection=dbcon}
+CREATE TABLE IF NOT EXISTS Affiliation (
+aff TEXT NOT NULL PRIMARY KEY
+)
+```
+
+```{sql connection=dbcon}
+INSERT INTO Affiliation VALUES
+("PT"),
+("FT"),
+("Contract")
+```
+
+
+```{sql connection=dbcon}
+CREATE TABLE IF NOT EXISTS Author (
+aid NUMBER PRIMARY KEY NOT NULL,
+name TEXT NOT NULL,
+email TEXT NOT NULL,
+authorAffiliation TEXT NOT NULL,
+FOREIGN KEY (authorAffiliation) references Affiliation (aff)
+)
+```
+
+```{sql connection=dbcon}
+INSERT INTO Module(num, title, lengthInMin) VALUES
+("001", "Introduction", 30),
+("002", "Chapter 1", 50),
+("003", "Chapter 2", 45),
+("004", "Chapter 3", 45);
+```
+
+```{sql connection=dbcon}
+SELECT * FROM Module
+```
+
+```{sql connection=dbcon}
+INSERT INTO Author VALUES
+(10001, "Gary", "gary@neu.edu", "Contract"),
+(10002, "Lucy", "lucy@gt.edu", "FT"),
+(10003, "Jack", "jack@sd.edu", "PT"),
+(10004, "Peter", "peter@uiuc.edu", "Contract")
+```
+
+```{sql connection=dbcon}
+SELECT * FROM Author
+```
+
+
+

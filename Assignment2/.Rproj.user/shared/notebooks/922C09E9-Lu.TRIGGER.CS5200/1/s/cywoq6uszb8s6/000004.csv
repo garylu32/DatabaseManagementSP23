@@ -1,0 +1,7 @@
+"0","CREATE TABLE IF NOT EXISTS Author (
+aid NUMBER PRIMARY KEY NOT NULL,
+name TEXT NOT NULL,
+email TEXT NOT NULL,
+authorAffiliation TEXT NOT NULL,
+FOREIGN KEY (authorAffiliation) references Affiliation (aff)
+)"

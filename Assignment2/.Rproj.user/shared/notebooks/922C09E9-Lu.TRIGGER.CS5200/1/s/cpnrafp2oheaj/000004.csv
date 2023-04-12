@@ -1,0 +1,5 @@
+"0","INSERT INTO Module(num, title, lengthInMin) VALUES
+(""001"", ""Introduction"", 30),
+(""002"", ""Chapter 1"", 50),
+(""003"", ""Chapter 2"", 45),
+(""004"", ""Chapter 3"", 45);"

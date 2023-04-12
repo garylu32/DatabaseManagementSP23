@@ -1,0 +1,5 @@
+"0","INSERT INTO Author VALUES
+(10001, ""Gary"", ""gary@neu.edu"", ""Contract""),
+(10002, ""Lucy"", ""lucy@gt.edu"", ""FT""),
+(10003, ""Jack"", ""jack@sd.edu"", ""PT""),
+(10004, ""Peter"", ""peter@uiuc.edu"", ""Contract"")"
