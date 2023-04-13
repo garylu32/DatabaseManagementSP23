@@ -1,0 +1,50 @@
+---
+title: "CS5200 Query Databases and Dataframes in R with SQL"
+output: html_notebook
+---
+
+```{r}
+library(sqldf)
+```
+
+```{r}
+
+dbcon <- dbConnect(RSQLite::SQLite(), "/Users/gary/Desktop/CS5200/Assignment/Assignment3/MediaDB.db")
+```
+
+```{r}
+#Question1
+rs <- dbGetQuery(dbcon, "SELECT * FROM invoice_items")
+rs["ItemPrice"] <- rs$Quantity * rs$UnitPrice
+print(rs)
+avgTrimmedPrice <- mean(rs$ItemPrice, trim = 0.1)
+avgTrimmedPrice
+```
+
+```{r}
+#Question2
+newQuery <- sqldf("SELECT InvoiceId, SUM(ItemPrice) AS totalPrice, SUM(Quantity) AS numOfItem FROM rs GROUP BY InvoiceId")
+sqldf("SELECT * FROM newQuery")
+```
+
+```{r}
+#Question3
+plot(type = "o", newQuery$numOfItem, newQuery$totalPrice, main = "Question3", xlab = "Number Of Item", ylab = "Total Price")
+```
+
+```{r}
+#Question4
+for (i in 1:length(newQuery$numOfItem)) {
+  if (newQuery$numOfItem[i] > 10) {
+    newQuery$DiscPrice[i] = newQuery$totalPrice[i] * 0.9
+  } else {
+    newQuery$DiscPrice[i] = newQuery$totalPrice[i]
+  }
+}
+```
+
+```{r}
+#Question5
+sqldf("SELECT * FROM newQuery WHERE newQuery.numOfItem > 10")
+```
+

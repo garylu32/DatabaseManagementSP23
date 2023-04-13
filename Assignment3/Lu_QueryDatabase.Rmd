@@ -1,0 +1,110 @@
+---
+title: "CS5200 Assignment Query a Database with SQL"
+output: html_notebook
+---
+
+```{r}
+library(RSQLite)
+
+dbcon <- dbConnect(RSQLite::SQLite(), "/Users/gary/Desktop/CS5200/Assignment/Assignment3/MediaDB.db")
+```
+
+```{sql connection=dbcon}
+-- Question1: What are the last name, city, state, and country of all customers who made at least one purchase and live either in Brazil or Canada? Do not list duplicates.
+
+SELECT DISTINCT customers.LastName, customers.City, customers.State, customers.Country
+FROM customers
+JOIN invoices
+ON invoices.CustomerId = customers.CustomerId AND (Country = 'Brazil' OR Country = 'Canada');
+
+```
+
+```{sql connection=dbcon}
+-- Question2: What are the titles of each album and the number of tracks on each album? 
+
+SELECT DISTINCT (Title),COUNT(*) AS TotalNumTracks
+FROM albums 
+JOIN tracks 
+WHERE albums.albumid = tracks.albumid 
+GROUP BY Title;
+```
+
+```{sql connection=dbcon}
+-- Question3: List the number of tracks by genre, ordered from most to least, restricted to those genres for which there are at least five tracks.
+
+SELECT DISTINCT genres.Name, COUNT(*) AS NumOfTracks
+FROM genres
+JOIN tracks
+WHERE genres.GenreId = tracks.GenreId
+GROUP BY genres.Name
+HAVING NumOfTracks >= 5
+ORDER BY NumOfTracks;
+```
+
+```{sql connection=dbcon}
+-- Question4: What is the average "tenure" of the employees in months, i.e., the time they have been working at our store?
+
+SELECT ROUND((AVG(strftime('%Y','now') - strftime('%Y', HireDate)) * 12 + AVG(strftime('%M','now') - strftime('M', HireDate))),0) AS avgTenure
+FROM employees;
+
+``` 
+
+```{sql connection=dbcon}
+-- Question5: What are the total number of unique customers for each Brazilian state (e.g., MG, SP, etc.), ordered alphabetically by state, who made at least one purchase (i.e., do not consider customers who never made a purchase)?
+
+SELECT customers.Country, customers.State, COUNT(DISTINCT customers.CustomerId) AS numOfCustomers
+FROM customers
+JOIN invoices
+ON customers.CustomerId = invoices.CustomerId
+WHERE customers.Country = 'Brazil'
+GROUP BY State;
+```
+
+```{sql connection=dbcon}
+-- Question6: How many customers never made a purchase, i.e., they appear in the customers table but not in the invoices table.
+
+SELECT COUNT(CustomerID) AS NumOfCustomers
+FROM customers
+WHERE CustomerID NOT IN (SELECT CustomerID FROM invoices);
+```
+
+```{sql connection=dbcon}
+-- Question7: How many albums contain the substring "symphony" in the album title?
+
+SELECT COUNT(albums.Title) AS NumOfAlbums
+FROM albums
+WHERE title LIKE '%symphony%';
+```
+
+```{sql connection=dbcon}
+-- Question8: What is the total "time" of all tracks per artist in hours, i.e., add up the "Milliseconds" column in tracks?
+
+SELECT DISTINCT artists.Name, ROUND((SUM(cast(tracks.Milliseconds AS float)) / 3600000),2) AS totalTime
+FROM artists, tracks, albums
+WHERE artists.ArtistId = albums.ArtistId AND albums.AlbumId = tracks.AlbumId
+GROUP BY artists.ArtistId
+HAVING min(tracks.trackId) >= 1
+
+```
+
+```{sql connection=dbcon}
+-- Question9: Which playlists are the longest (greater than 0), regardless of type and format?
+
+SELECT n.Name, MAX(n.totalHour) AS totalHour, n.totalMinute
+FROM
+(SELECT DISTINCT playlists.Name, FLOOR((SUM(cast(tracks.Milliseconds AS float)) / 60000)/60) AS totalHour, (SUM(cast(tracks.Milliseconds AS float)) / 60000) %60 AS totalMinute
+FROM tracks, playlist_track, playlists
+WHERE tracks.TrackId = playlist_track.TrackId AND playlists.PlaylistId = playlist_track.PlaylistId
+GROUP BY playlists.PlaylistId) n;
+```
+
+```{sql connection=dbcon}
+-- Question10: Which artists have composed tracks in more than three different genres? 
+SELECT artists.Name, COUNT(DISTINCT tracks.genreId) AS numOfGenres
+FROM artists, albums, tracks
+WHERE artists.ArtistId = albums.ArtistId AND albums.AlbumId = tracks.AlbumId
+GROUP BY artists.Name
+HAVING COUNT(DISTINCT tracks.GenreId) > 3;
+
+```
+
