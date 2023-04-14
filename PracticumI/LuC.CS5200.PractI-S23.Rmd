@@ -1,0 +1,465 @@
+---
+title: "CS5200 Practicum I Design and Implement a Relational Database"
+author: "Chenhao Lu, lu.chenh@northeastern.edu"
+date: "Spring 2023"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+
+## Package setup
+In this section, we install all the required packages for this practicum
+```{r packageSetup, results = 'hide', message = FALSE, warning=FALSE}
+library(DBI) # loading required package for RMySQL
+library(RMySQL)
+library(RSQLite)
+library(gsubfn)
+library(proto)
+library(sqldf)
+options(sqldf.driver = "SQLite")
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+```
+
+## Connect to Database
+In this section, we connect to our MySQL database based on the AWS server
+```{r dbSetup}
+# AWS Setting
+db_user <- 'admin'
+db_password <- '19950316'
+db_name <- 'Practicum1DB'
+db_host <- 'cs5200-db.c55xlismyygp.us-west-2.rds.amazonaws.com' #AWS Host
+db_port <- 3306
+
+# Connect to database
+mydb <-  dbConnect(MySQL(), user = db_user, password = db_password,
+                 dbname = db_name, host = db_host, port = db_port)
+
+```
+
+```{sql connection=mydb, include=FALSE}
+DROP TABLE IF EXISTS incidents, conditions, airports, airlines
+```
+
+## Create Database
+
+#### Task4D
+Create a lookup table *conditions* and will link this lookup table *incidents*. Explanation will leave empty for future expansion.
+```{sql createLookupTable, connection=mydb}
+CREATE TABLE conditions (
+cid INTEGER NOT NULL,
+`condition` TEXT NOT NULL,
+explanation TEXT,
+PRIMARY KEY(cid)
+)
+```
+
+#### Task4B  
+Create table *airports* that stores airport name and airport code, and state columns. Airport code will leave empty for future expansion.
+```{sql createAirports, connection=mydb}
+CREATE TABLE airports (
+aid INTEGER NOT NULL,
+airportName TEXT NOT NULL,
+airportCode TEXT,
+state TEXT NOT NULL,
+PRIMARY KEY(aid)
+)
+```
+
+#### Task4E 
+Create table *airlines* that stores airline name, airline code, and flag. Flag represents the country that airline belongs to. Both airline code and flag will leave empty for future expansion
+```{sql createAirlines, connection=mydb}
+CREATE TABLE airlines (
+eid INTEGER NOT NULL,
+airlineName TEXT NOT NULL,
+airlineCode TEXT,
+flag TEXT,
+PRIMARY KEY(eid)
+)
+```
+
+#### Task4A,C,F
+Create table *incidents* that stores the rid, date, origin of flight, airline, aircraft, flight phase, altitude, condition, and warnings columns. 
+```{sql createIncidents, connection=mydb}
+CREATE TABLE incidents (
+rid INTEGER NOT NULL,
+depDate DATE NOT NULL,
+origin INTEGER NOT NULL,
+airline INTEGER NOT NULL,
+aircraft TEXT NOT NULL,
+flightPhase TEXT NOT NULL,
+altitude INTEGER NOT NULL, 
+`conditions` INTEGER NOT NULL,
+warnings BOOLEAN NOT NULL,
+PRIMARY KEY (rid),
+FOREIGN KEY (origin) REFERENCES airports(aid),
+FOREIGN KEY (airline) REFERENCES airlines(eid),
+FOREIGN KEY (`conditions`) REFERENCES conditions(cid)
+)
+```
+
+#### Task4G 
+Test codes for table definitions.
+```{sql tableTestA, connection=mydb, eval = F}
+SHOW COLUMNS FROM conditions
+```
+```{sql tableTestB,connection=mydb, eval = F}
+SHOW COLUMNS FROM incidents
+```
+```{sql tableTestC, connection=mydb, eval = F}
+SHOW COLUMNS FROM airports
+```
+```{sql testTestD,connection=mydb, eval = F}
+SHOW COLUMNS FROM airlines
+```
+
+## Load Data
+Create a new data frame called *bds.raw* and load the birdStrike CSV file into it. 
+```{r, loadCSVFile}
+birdData <- 'BirdStrikesData-V2.csv';
+bds.raw <- read.csv(birdData, header = TRUE, stringsAsFactors = FALSE)
+head(bds.raw)
+```
+## Insert Data
+In this section, we populate the loaded data from last section into the three tables (incidents, airports, and airlines) we created. Also, we omit the columns from the CSV that are not referenced in the tables. There are also few assumptions we made due to time constraints, we will explain those assumptions later in the data manipulation process.  
+
+#### Link to a "sentinel" airline
+When there is no airline, add an "unknown" airline to the table rather than leaving the value NULL.
+```{r, nullAirline}
+defaultW <- getOption("warn") 
+options(warn = -1) 
+
+bds.raw <- sqldf(c(
+  "UPDATE 'bds.raw' SET airline = 'Unknown' WHERE airline = ''",
+  "SELECT * FROM 'bds.raw'"
+))
+
+options(warn = defaultW)
+head(bds.raw[bds.raw$airline == 'Unknown',])
+```
+#### Link to a "sentinel" airport
+When there is no airport, add an "unknown" airport to the table rather than leaving the value NULL.
+```{r, nullAirport}
+defaultW <- getOption("warn") 
+options(warn = -1) 
+
+bds.raw <- sqldf(c(
+  "UPDATE 'bds.raw' SET airport = 'Unknown' WHERE airport = ''",
+  "SELECT * FROM 'bds.raw'"
+))
+
+options(warn = defaultW)
+head(bds.raw[bds.raw$airline == 'Unknown',])
+```
+#### Update flight phase
+
+After checking the flight_phase column in the CSV file, we find out that the inputs do not match the restricted values (takeoff, landing, inflight, unknown). Therefore, we assume that "Climb" and "Take-off run" belong to "takeoff", "Landing Roll", "Descent" and "Approach" belong to "Landing", "Taxi" and "Parked" belong to "inflight", and finally "" belongs to NA. In the defination, we believe that "inflight" would be more reasonable if changing to "onGround", because according to some flight defination, "inflight" means the aircraft moves under its own power and both takeoff and landing could be included in "inflight".
+
+```{r flightPhaseOrigin}
+unique(bds.raw$flight_phase)
+```
+
+```{r flightPhaseUpdate}
+defaultW <- getOption("warn") 
+options(warn = -1) 
+
+bds.raw <- sqldf(c(
+  "UPDATE `bds.raw` SET flight_phase = 
+  CASE WHEN flight_phase = 'Climb' THEN 'Takeoff' 
+       WHEN flight_phase = 'Take-off run' THEN 'Takeoff'
+       WHEN flight_phase = 'Approach' THEN 'Landing'
+       WHEN flight_phase = 'Descent' THEN 'Landing'
+       WHEN flight_phase = 'Landing Roll' THEN 'Landing'
+       WHEN flight_phase = 'Parked' THEN 'onGround'
+       WHEN flight_phase = 'Taxi' THEN 'onGround'
+       WHEN flight_phase = '' THEN 'Unknown'
+  END;",
+  "SELECT * FROM `bds.raw`"
+))
+
+options(warn = defaultW)
+
+head(bds.raw$flight_phase,100)
+```
+
+#### Create subset of the data 
+We create four subsets of the data for four tables we created earlier.  
+
+
+##### Subset airport
+```{r airportSet}
+airportDf <- data.frame(airportName = bds.raw$airport, state = bds.raw$origin)
+#Removing all the duplicate airports
+airportDf <- airportDf %>% distinct() 
+#Add the primary key
+airportDf <- cbind(aid = 1:nrow(airportDf), airportDf)
+head(airportDf)
+```
+##### Subset airline
+```{r airlineSet}
+airlineDf <- data.frame(airlineName = bds.raw$airline)
+#Removing all the duplicate airports
+airlineDf <- airlineDf %>% distinct() 
+airlineDf <- cbind(eid = 1:nrow(airlineDf), airlineDf)
+head(airlineDf)
+```
+##### Subset conditions
+
+```{r conditionsSet}
+condDf <- data.frame(condition = unique(bds.raw$sky_conditions))
+condDf <- cbind(cid = 1:nrow(condDf), condDf)
+condDf
+```
+
+##### Subset incidents
+
+```{r incidentsSet}
+incidentsDf <- data.frame(rid = bds.raw$rid,
+                          depDate = bds.raw$flight_date,
+                          origin = bds.raw$airport,
+                          airline = bds.raw$airline,
+                          aircraft = bds.raw$aircraft,
+                          flightPhase = bds.raw$flight_phase,
+                          altitude = bds.raw$altitude_ft,
+                          conditions = bds.raw$sky_conditions,
+                          warnings = bds.raw$pilot_warned_flag)
+head(incidentsDf)
+```
+#### Update incidents set
+We delete all the NA values in the set, because our tables do not include NULL value. Also, we update the depDate column to MySQL datetime format.
+```{r incidentsSetUpdate}
+incidentsDf$depDate <- as.Date(incidentsDf$depDate, format = "%m/%d/%y")
+incidentsDf <- na.omit(incidentsDf)
+sapply(incidentsDf, function(x) sum(is.na(x)))
+head(incidentsDf)
+```
+#### Connect aid, eid, and cid to incidents
+We replace the aid, eid and cid in the corresponding columns in incidents as part of "normalization".
+```{r foreginKeyUpdate_cid}
+#Link cid, conditions
+incidentsDf <- sqldf(
+  "SELECT rid, depDate, airline, aircraft, origin, flightPhase, altitude, warnings, cid AS conditions FROM incidentsDf
+  JOIN condDf ON incidentsDf.conditions = condDF.condition"
+)
+```
+
+```{r foreginKeyUpdate_eid}
+#Link eid, airline
+incidentsDf <- sqldf(
+  "SELECT rid, depDate, aircraft, origin, flightPhase, altitude, warnings, conditions, eid AS airline FROM incidentsDf
+  JOIN airlineDf ON incidentsDf.airline = airlineDf.airlineName"
+)
+```
+
+```{r foreginKeyUpdate_aid}
+#Link eid, airport
+incidentsDf <- sqldf(
+  "SELECT rid, depDate, airline, aircraft, aid AS origin, flightPhase, altitude, warnings, conditions FROM incidentsDf
+  JOIN airportDf ON incidentsDf.origin = airportDf.airportName"
+)
+```
+
+```{r replacementCheck}
+#Check whether aid, cid, and eid replacement is done
+head(incidentsDf$conditions)
+head(incidentsDf$airline)
+head(incidentsDf$origin)
+head(incidentsDf)
+```
+#### Update on warnings column
+Warnings column in our incidents subset is character and we need to convert it to boolean according to our table schema.
+```{r warningsUpdate}
+incidentsDf$warnings <- ifelse(incidentsDf$warnings =="Y" ,1, 0)
+head(incidentsDf$warnings)
+```
+
+#### Write the subsets of dataframe to tables
+```{r writeConditions}
+dbWriteTable(mydb, "conditions", condDf[1:nrow(condDf),], row.names = FALSE, append = TRUE)
+```
+```{r writeAirport}
+dbWriteTable(mydb, "airports", airportDf[1:nrow(airportDf),], row.names = FALSE, append = TRUE)
+```
+```{r writeAirline}
+dbWriteTable(mydb, "airlines", airlineDf[1:nrow(airlineDf),], row.names = FALSE, append = TRUE)
+```
+```{r writeIncidents}
+dbWriteTable(mydb, "incidents", incidentsDf[1:nrow(incidentsDf),], row.names = FALSE, append = TRUE)
+```
+
+## Display loaded tables
+```{sql displayCondtions, connection=mydb}
+SELECT * FROM conditions
+LIMIT 10
+```
+```{sql displayAirports, connection=mydb}
+SELECT * FROM airports
+LIMIT 10
+```
+```{sql displayAirlines, connection=mydb}
+SELECT * FROM airlines
+LIMIT 10
+```
+```{sql displayIncidents, connection=mydb}
+SELECT * FROM incidents
+LIMIT 200
+```
+
+## Ten states with the greatest number of incidents
+We create a SQL query and find out that California, Texas, Florida, New York, Illinois, Pennsylvania, Missouri, Kentucky, Ohio, and Hawaii are 10 states with the greatest number of incidents.
+```{sql tenGreatestState, connection=mydb}
+SELECT airportCount.state, SUM(airportCount.numOfIncidents) AS sumOfIncidents
+FROM (
+SELECT airports.aid, airports.airportName, airports.state, originCount.numOfIncidents 
+FROM airports
+JOIN (
+SELECT origin, COUNT(*) AS numOfIncidents 
+FROM incidents 
+GROUP BY origin) AS originCount
+ON airports.aid = origin) AS airportCount
+GROUP BY airportCount.state
+ORDER BY sumOfIncidents DESC LIMIT 10
+
+```
+## Airlines that had an above average number bird strike incidents
+There are 43 airlines had an above average number of bird strike incidents. Their names and number of bird strikes are listed below.
+```{sql airlineAboveAge, connection=mydb}
+SELECT airlines.airlineName, COUNT(*) AS numBirdStrikes
+FROM incidents
+JOIN airlines ON airlines.eid = incidents.airline
+GROUP BY airlines.airlineName
+HAVING numBirdStrikes > (SELECT COUNT(*)/COUNT(DISTINCT airlines.airlineName) AS avgBirdStrikes FROM incidents
+JOIN airlines ON airlines.eid = incidents.airline)
+```
+
+## The number of bird strike incidents by month
+August is the month having most bird strike incidents. And February is the month having the least bird strike incidents. 
+```{r numIncidentsByMonth}
+monthQuery <- "SELECT MONTHNAME(depDate) AS month, COUNT(*) AS numOfIncidents
+FROM incidents
+GROUP BY MONTHNAME(depDate)
+ORDER BY MONTH(depDate);"
+
+incidentsByMonth <- dbGetQuery(mydb, monthQuery)
+
+incidentsByMonth 
+```
+
+## The number of bird strike incidents by flight phase
+Most of the bird strike incidents happened in landing phase. And there are only 84 incidents happened on ground which is the least number.
+```{r numIncidentsByFlightPhase}
+phaseQuery <- "SELECT flightPhase, COUNT(*) AS numOfIncidents
+FROM `incidents`
+GROUP BY flightPhase
+ORDER BY COUNT(*) DESC"
+
+incidentsByPhase <- dbGetQuery(mydb, phaseQuery)
+
+incidentsByPhase
+```
+
+## Scatter plot of number of bird strike incidents by month
+```{r plotByMonth}
+graph <- ggplot(incidentsByMonth, aes(x = fct_inorder(month), y = numOfIncidents)) + geom_point() + xlab("Month") + ylab("Number of Incidents") + ggtitle("Scatter Plot of Number of Bird Strike Incidents by Month") + theme(axis.text = element_text(size = 5))   
+graph
+```
+
+## Create procedure
+We create a stored procedure that adds a new incident to the database.  
+
+We check whether the insert airport, airline, and condition information is already existed in corresponding tables. If not, we insert them to the tables as a new value. Otherwise, we assign the exist id to them. 
+
+```{sql checkExistence, connection=mydb}
+DROP PROCEDURE IF EXISTS addIncidents
+```
+
+```{sql addIncidentProcedure, connection=mydb}
+CREATE PROCEDURE addIncidents(
+IN p_id INTEGER,
+IN p_depDate DATE,
+IN p_airport TEXT,
+IN p_state TEXT,
+IN p_airline TEXT,
+IN p_aircraft TEXT,
+IN p_flightPhase TEXT,
+IN p_altitude INTEGER,
+IN p_conditions TEXT,
+IN p_warnings BOOLEAN
+)
+BEGIN
+
+  DECLARE temp_cond INT;
+  DECLARE temp_airport INT;
+  DECLARE temp_airline INT;
+  DECLARE temp_cid INT;
+  DECLARE temp_aid INT;
+  DECLARE temp_eid INT;
+  
+  SELECT COUNT(conditions.cid) INTO temp_cond FROM conditions
+  WHERE conditions.condition = p_conditions;
+  IF temp_cond = 0 THEN
+    INSERT INTO conditions(`condition`) VALUES (p_conditions);
+  END IF;
+  
+  SELECT COUNT(airports.aid) INTO temp_airport FROM airports
+  WHERE airports.airportName = p_airport;
+  IF temp_airport = 0 THEN
+    INSERT INTO airports(airportName,state) VALUES (p_airport, p_state);
+  END IF;
+  
+  SELECT COUNT(airlines.eid) INTO temp_airline FROM airlines
+  WHERE airlines.airlineName = p_airline;
+  IF temp_airline = 0 THEN
+    INSERT INTO airlines(airlineName) VALUES (p_airline);
+  END IF;
+  
+ 
+  SELECT conditions.cid INTO temp_cid FROM conditions
+  WHERE conditions.condition = p_conditions;
+  
+  
+  SELECT airports.aid INTO temp_aid FROM airports
+  WHERE airports.airportName = p_airport AND airports.state = p_state;
+  
+  
+  SELECT airlines.eid INTO temp_eid FROM airlines
+  WHERE airlines.airlineName = p_airline;
+  
+  INSERT INTO incidents (rid, depDate, origin, airline, aircraft, flightPhase, altitude, conditions, warnings) VALUE (p_id, p_depDate, temp_aid, temp_eid, p_aircraft, p_flightPhase, p_altitude, temp_cid, p_warnings);
+  
+END;
+```
+
+## Test the Procedure
+We insert a new incidents with TEST airport, TEST state, TEST airline, and TEST condition to check if the procedure correctly process the new airport, airline and condition data. 
+```{sql procedureTestA, connection=mydb}
+CALL addIncidents(999999, "2023-03-02", "TEST airport", "TEST state", "TEST airline", "Airplane", "Landing", 100, "TEST condition", 0)
+```
+
+The TEST condition was correctly inserted in the table.
+```{sql procedureTestB, connection=mydb}
+SELECT * FROM conditions
+```
+
+The TEST airline was correctly inserted in the table.
+```{sql procedureTestC, connection=mydb}
+SELECT * FROM airlines
+WHERE airlineName = "TEST airline"
+```
+The TEST airport and TEST state were correctly inserted into the table.
+```{sql procedureTestD, connection=mydb}
+SELECT * FROM airports
+WHERE airportName = "TEST airport"
+```
+Finally we check the complete new inserted incident in the *incidents* table and all the data are correctly processed. The *addIncidents* procedure passed our basic test.
+```{sql procedureTestE, connection=mydb}
+SELECT * FROM incidents
+WHERE rid = 999999
+```
+
+```{r dbDisconnect}
+dbDisconnect(mydb)
+```
+
+
