@@ -1,0 +1,197 @@
+---
+title: "CS5200 Assignment8 Explore Query Planning and Indexing"
+author: "Chenhao Lu"
+date: "Spring 2023"
+output: pdf_document
+
+---
+
+```{r, include=FALSE}
+library(dplyr)
+library(dbplyr)
+```
+
+
+## Preliminary Tasks
+Connect to the SQLite database.
+```{r}
+library(RSQLite)
+dbcon <- dbConnect(RSQLite::SQLite(), 
+                   "/Users/gary/Desktop/CS5200/Assignment/Assignment8/sakila.db")
+```
+
+Check whether the previous connection works.
+```{r, warning=FALSE}
+tbl(dbcon, sql("SELECT * FROM film LIMIT 10"))
+```
+
+Connect to the MySQL database.
+```{r}
+library(RMySQL)
+mydb <- dbConnect( drv = RMySQL::MySQL(), user='root', password='19950316', 
+                   dbname='sakila', host='localhost')
+```
+
+Check whether the previous connection works.
+```{r, warning=FALSE}
+tbl(mydb, sql("SELECT * FROM film LIMIT 10"))
+```
+
+## Question1
+There are two auto indexes defined and no user-defined index in the RSQLite database.
+```{r}
+dbGetQuery(dbcon, "SELECT
+   `type`, 
+   `name`, 
+   `tbl_name`, 
+   `sql`
+  FROM sqlite_master
+WHERE `type` = 'index'")
+```
+Run query to find the number of films per category.
+```{r}
+dbGetQuery(dbcon, "SELECT category.name AS category, COUNT(*) AS numFilms
+               FROM film
+               JOIN film_category ON film.film_id = film_category.film_id
+               JOIN category ON film_category.category_id = category.category_id
+               GROUP BY category.name")
+```
+
+## Question2
+```{r}
+#Determine whether there is user defined indexes in the database
+dbGetQuery(mydb, "SELECT DISTINCT TABLE_NAME, 
+              INDEX_NAME FROM INFORMATION_SCHEMA. STATISTICS 
+              WHERE TABLE_SCHEMA = 'sakila'")
+```
+Run query(the same as question1) to find the number of films per category.
+```{r}
+dbGetQuery(mydb, "SELECT category.name AS category, COUNT(*) AS numFilms
+               FROM film
+               JOIN film_category ON film.film_id = film_category.film_id
+               JOIN category ON film_category.category_id = category.category_id
+               GROUP BY category.name")
+```
+## Question3
+Get the query plan for SQLite database (question1)
+```{r}
+bt <- Sys.time()
+qp <- dbGetQuery(dbcon,
+  "EXPLAIN QUERY PLAN SELECT category.name AS category, COUNT(*) AS numFilms
+               FROM film
+               JOIN film_category ON film.film_id = film_category.film_id
+               JOIN category ON film_category.category_id = category.category_id
+               GROUP BY category.name"
+)
+qp
+system.time(qp)
+et <- Sys.time()
+t.which <- et - bt
+cat("Time elapsed: ", round((t.which),3), " sec")
+```
+
+Get the query plan for MySQL database (question2)
+```{r}
+bt <- Sys.time()
+qp <- dbGetQuery(mydb, 
+  "EXPLAIN SELECT category.name AS category, COUNT(*) AS numFilms
+               FROM film
+               JOIN film_category ON film.film_id = film_category.film_id
+               JOIN category ON film_category.category_id = category.category_id
+               GROUP BY category.name"
+)
+qp
+et <- Sys.time()
+t.which <- et - bt
+cat("Time elapsed: ", round((t.which),3), " sec")
+```
+
+## Question4
+For SQLite, query plan gives us a more detailed steps rather than the EXPLAIN query does for MySQL. We can clearly see that the query first scans film_category table based on auto index. Then, query searches for the rows based on the primary keys of film and category stored in the film_category as foreign keys. Finally, it uses a B-tree for group.  
+For MySQL query plans, it first scan the category table with the primary keys for all the categories exist then used default indexes in the database to identify rows in table film_category and film. Comparing to SQLite, it follows different steps. MySQL plan doesn't do a full table scan for film, which make it faster than the SQLite plan.  
+MySQL query has a time lapse of 0.041 second. SQLite query is exact three times slower than MySQL and has a time lapse of 0.123 second. 
+
+## Question5
+```{r}
+dbGetQuery(dbcon,
+           "SELECT title,language.name, length
+           FROM film
+           INNER JOIN language ON film.language_id = language.language_id
+           WHERE title = 'ZORRO ARK'"
+           )
+```
+
+## Question6
+```{r}
+bt <- Sys.time()
+dbGetQuery(dbcon,
+           "EXPLAIN QUERY PLAN SELECT title,language.name, length
+           FROM film
+           INNER JOIN language ON film.language_id = language.language_id
+           WHERE title = 'ZORRO ARK'"
+           )
+et <- Sys.time()
+t.which <- et - bt
+cat("Time elapsed: ", round((t.which),3), " sec")
+```
+
+## Question7
+```{r, warning=FALSE}
+dbGetQuery(dbcon,
+           "DROP INDEX TitleIndex"
+           )
+
+dbGetQuery(dbcon,
+           "CREATE INDEX TitleIndex
+           ON film (title)"
+           )
+```
+
+## Question8
+```{r}
+bt <- Sys.time()
+dbGetQuery(dbcon,
+           "SELECT title,language.name, length
+           FROM film
+           INNER JOIN language ON film.language_id = language.language_id
+           WHERE title = 'ZORRO ARK'"
+           )
+et <- Sys.time()
+t.which <- et - bt
+cat("Time elapsed: ", round((t.which),3), " sec")
+
+```
+
+```{r}
+dbGetQuery(dbcon,
+           "EXPLAIN QUERY PLAN SELECT title,language.name, length
+           FROM film
+           INNER JOIN language ON film.language_id = language.language_id
+           WHERE title = 'ZORRO ARK'"
+           )
+```
+
+## Question9
+Query plans are not the same in question6 and question8. In the detail column, we can see that question 8 use the TitleIndex we created to search for the film with title = "ZORRO ARK". When using TitleIndex, the query has a time lapse of 0.02 second and it is faster than the query without TitleIndex scoring a time lapse of 0.03 second.
+
+## Question10
+Query that returns the title, language and length of all films with the word "GOLD" with any capitalization in its name.
+```{r}
+dbGetQuery(dbcon,
+           "SELECT film.title, language.name, film.length
+           FROM film
+           INNER JOIN language ON film.language_id = language.language_id
+           WHERE LOWER(film.title) LIKE '%gold%'"
+           )
+```
+
+## Question11
+```{r}
+dbGetQuery(dbcon,
+           "EXPLAIN QUERY PLAN SELECT film.title, language.name, film.length
+           FROM film
+           INNER JOIN language ON film.language_id = language.language_id
+           WHERE LOWER(film.title) LIKE '%gold%'"
+           )
+```
+This query plan doesn't use the TitleIndex we created, instead it appears to scan the whole film table. Because the WHERE statement is overly complicated for the query optimizer to use the Index. Instead, it would be more efficient to find all the "GOLD" in the title based on the whole scan.
