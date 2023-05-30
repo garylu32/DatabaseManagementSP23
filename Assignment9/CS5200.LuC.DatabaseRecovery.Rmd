@@ -1,0 +1,51 @@
+---
+title: "CS5200.LuC.InvestigateDatabaseRecovery"
+author: "Chenhao Lu"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+## Quesiton 1
+Choose a database recovery problem or scenario (perhaps from work) and then propose a solution using the techniques described in Chapter 11 in the textbook. Briefly describe the technique, when it is appropriate to use and what recovery problem it solves. 
+
+## Question 2
+Using any of the SQLite database we have previously worked with, write an update that requires related modification of multiple tables and conduct those updates within a transaction. Test the code so that you show that the transaction works and write one test where the transaction fails and rolls back.  
+
+### TRANSACTION 1
+We use sakila database from last assignment and update the payment table using TRANSACTION.
+In our first TRANSACTION, we change the amount from 2.99 to 3.00 and customer_id from 1 to 99 for the #1 payment_id.
+
+```{r, warning=FALSE}
+library(RSQLite)
+dbnew <- dbConnect(RSQLite::SQLite(),
+                   "/Users/gary/Desktop/CS5200/Assignment/Assignment9/sakila.db")
+```
+
+```{sql connection=dbnew}
+SELECT * FROM payment LIMIT 10
+```
+```{sql connection=dbnew}
+BEGIN TRANSACTION;
+```
+
+```{sql connection=dbnew}
+UPDATE payment
+SET amount = amount + 0.01
+WHERE payment_id = 1
+```
+
+```{sql connection=dbnew}
+UPDATE payment
+SET customer_id = 99
+WHERE payment_id = 1
+```
+
+```{sql connection=dbnew}
+COMMIT TRANSACTION;
+```
+
+```{sql connection=dbcon}
+SELECT * FROM payment LIMIT 10
+```
